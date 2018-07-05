@@ -9,6 +9,9 @@ import chargedot.server.handler.ProtocolEncoder;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -49,9 +52,14 @@ public class Server {
         return ourInstance;
     }
 
+    public static void main(String[] args) {
+        LOGGER.info("server is starting...  ");
+        Server.getInstance().run();
+    }
+
     private void init() {
-        bossGroup = new NioEventLoopGroup();
-        workerGroup = new NioEventLoopGroup(WORKER_THREAD_COUNT);
+        bossGroup = Epoll.isAvailable() ? new EpollEventLoopGroup() : new NioEventLoopGroup();
+        workerGroup = Epoll.isAvailable() ? new EpollEventLoopGroup(WORKER_THREAD_COUNT) : new NioEventLoopGroup(WORKER_THREAD_COUNT);
         bootstrap = new ServerBootstrap();
         final DataPacketResolver dataPacketResolver = new DataPacketResolver();
         final DataPacketPicker dataPacketPicker = new DataPacketPicker();
@@ -60,7 +68,7 @@ public class Server {
         bootstrap.group(bossGroup, workerGroup)
                 // NIO selector,  @see SelectionKey
                 // 设置mainReactor所对应的channel 生成DefaultChannelPipeline
-                .channel(NioServerSocketChannel.class)
+                .channel(Epoll.isAvailable() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
                 // 设置NioServerSocketChannel所对应Pipeline中的Handler hear.next = LoggingHandler
                 .handler(new LoggingHandler(LogLevel.INFO))
                 // 为subReactor设置childHandler
@@ -91,10 +99,5 @@ public class Server {
             workerGroup.shutdownGracefully();
             bossGroup.shutdownGracefully();
         }
-    }
-
-    public static void main(String[] args) {
-        LOGGER.info("server is starting...  ");
-        Server.getInstance().run();
     }
 }
